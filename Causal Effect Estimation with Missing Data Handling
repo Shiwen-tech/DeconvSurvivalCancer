@@ -1,0 +1,27 @@
+---
+title: "Causal Effect Estimation with Missing Data Handling"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+library(survival)
+library(survey)
+library(MatchIt)
+library(mice)
+library(dplyr)
+
+imp <- mice(df[, c("age", "sex", "treatment", "cell_type_3", "time", "status")],
+            m = 5, method = 'pmm', seed = 123)
+completed <- complete(imp, action = 1)  
+ps_model <- glm(treatment ~ age + sex, data = completed, family = binomial)
+completed$ps <- predict(ps_model, type = "response")
+completed$ipw <- ifelse(completed$treatment == 1,
+                        1 / completed$ps, 1 / (1 - completed$ps))
+design <- svydesign(ids = ~1, weights = ~ipw, data = completed)
+ipw_cox <- svycoxph(Surv(time, status) ~ treatment, design = design)
+summary(ipw_cox)
+dr_model <- coxph(Surv(time, status) ~ treatment + cell_type_3 + age + sex,
+                  data = completed)
+summary(dr_model)
+
+
